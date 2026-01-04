@@ -4,8 +4,7 @@ import (
 	"flag"
 	"time"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/filters"
+	containertypes "github.com/docker/docker/api/types/container"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	log "github.com/sirupsen/logrus"
@@ -17,17 +16,16 @@ func currentTime() string {
 }
 
 
-func getVolumes(ctx context.Context, client *client.Client) (volumetypes.VolumesListOKBody, error) {
-	args := filters.Args{}
-	volumes, err := client.VolumeList(ctx, args)
+func getVolumes(ctx context.Context, client *client.Client) (volumetypes.ListResponse, error) {
+	volumes, err := client.VolumeList(ctx, volumetypes.ListOptions{})
 	if err != nil {
-		return volumetypes.VolumesListOKBody{}, err
+		return volumetypes.ListResponse{}, err
 	}
 	return volumes, nil
 }
 
-func volumeInUse(ctx context.Context, client *client.Client, volume *types.Volume, debug bool) bool {
-	containers, err := client.ContainerList(ctx, types.ContainerListOptions{All: true})
+func volumeInUse(ctx context.Context, client *client.Client, volume *volumetypes.Volume, debug bool) bool {
+	containers, err := client.ContainerList(ctx, containertypes.ListOptions{All: true})
 	if err != nil {
 		return false
 	}
@@ -52,7 +50,7 @@ func volumeInUse(ctx context.Context, client *client.Client, volume *types.Volum
 	return inUse
 }
 
-func removeVolumes(ctx context.Context, client *client.Client, volumes []*types.Volume, debug bool) error {
+func removeVolumes(ctx context.Context, client *client.Client, volumes []*volumetypes.Volume, debug bool) error {
 	for _, v := range volumes {
 		if !volumeInUse(ctx, client, v, debug) {
 			if debug {
