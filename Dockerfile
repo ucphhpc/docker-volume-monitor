@@ -1,8 +1,11 @@
-FROM golang:1.23.12-alpine
+FROM golang:1.26-alpine
 RUN apk add git tzdata
 
 WORKDIR /go/src/docker-volume-monitor
-COPY . .
+
+COPY src src
+COPY go.mod go.mod
+COPY go.sum go.sum
 
 RUN go mod vendor
 RUN go build ./...
