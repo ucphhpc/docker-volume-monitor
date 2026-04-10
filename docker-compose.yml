@@ -1,0 +1,11 @@
+services:
+  updater:
+    build: ./
+    image: ucphhpc/docker-volume-monitor:${TAG}
+    deploy:
+      mode: global
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
+    command: -interval 10
