@@ -1,0 +1,42 @@
+environments:
+  docker_image:
+    environments:
+      GIT_USER: "{{SECRET:[github][username]}}"
+    pipelines:
+      - docker-volume-monitor
+pipelines:
+  docker-volume-monitor:
+    group: docker_image
+    locking: off
+    timer:
+      # Run on the 1st at 00:00 of every month
+      spec: "0 0 0 1 * ? *"
+      only_on_changes: no
+    materials:
+      docker-volume-monitor_git:  # this is the name of material
+        # says about type of material and url at once
+        name: docker-volume-monitor
+        git: https://github.com/ucphhpc/docker-volume-monitor.git
+        branch: master
+        destination: docker-volume-monitor
+      publish_docker_git:  # this is the name of material
+        # says about type of material and url at once
+        name: publish-docker-scripts
+        git: https://github.com/rasmunk/publish-docker-scripts.git
+        branch: main
+        username: ${GIT_USER}
+        password: "{{SECRET:[github][access_token]}}"
+        destination: publish-docker-scripts
+    parameters:
+      IMAGE: docker-volume-monitor
+      SRC_DIRECTORY: docker-volume-monitor
+      BUILD_MAKE_TARGET: build
+      BUILD_MAKE_ARGS: '--no-cache'
+      TEST_DIRECTORY: docker-volume-monitor
+      TEST_MAKE_TARGET: test
+      TEST_MAKE_ARGS: ''
+      PUSH_DIRECTORY: publish-docker-scripts
+      DEFAULT_TAG: latest
+      COMMIT_TAG: GO_REVISION_DOCKER_VOLUME_MONITOR_GIT
+      EXTRA_TAG: 0.0.1
+    template: docker_image
