@@ -4,9 +4,9 @@ import (
 	"flag"
 	"time"
 
-	containertypes "github.com/docker/docker/api/types/container"
-	volumetypes "github.com/docker/docker/api/types/volume"
-	"github.com/docker/docker/client"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/volume"
+	"github.com/moby/moby/client"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
@@ -15,18 +15,25 @@ func currentTime() string {
 	return time.Now().Format(time.RFC3339)
 }
 
-
-func getVolumes(ctx context.Context, client *client.Client) (volumetypes.ListResponse, error) {
-	volumes, err := client.VolumeList(ctx, volumetypes.ListOptions{})
+func getVolumes(ctx context.Context, apiClient *client.Client) ([]volume.Volume, error) {
+	volumes, err := apiClient.VolumeList(ctx, client.VolumeListOptions{})
 	if err != nil {
-		return volumetypes.ListResponse{}, err
+		return nil, err
 	}
-	return volumes, nil
+	return volumes.Items, nil
 }
 
-func volumeInUse(ctx context.Context, client *client.Client, volume *volumetypes.Volume, debug bool) bool {
-	containers, err := client.ContainerList(ctx, containertypes.ListOptions{All: true})
+func getContainers(ctx context.Context, apiClient *client.Client) ([]container.Summary, error) {
+	containers, err := apiClient.ContainerList(ctx, client.ContainerListOptions{All: true})
 	if err != nil {
+		return nil, err
+	}
+	return containers.Items, nil
+}
+
+func volumeInUse(ctx context.Context, apiClient *client.Client, volume volume.Volume, debug bool) bool {
+	containers, err := getContainers(ctx, apiClient)
+	if err != nil || containers == nil {
 		return false
 	}
 	inUse := false
@@ -34,6 +41,7 @@ func volumeInUse(ctx context.Context, client *client.Client, volume *volumetypes
 	if debug {
 		log.Debugf("%s - Checking whether volume: %s is in use", currentTime(), volume.Name)
 	}
+
 
 	for _, container := range containers {
 		for _, mount := range container.Mounts {
@@ -50,13 +58,13 @@ func volumeInUse(ctx context.Context, client *client.Client, volume *volumetypes
 	return inUse
 }
 
-func removeVolumes(ctx context.Context, client *client.Client, volumes []*volumetypes.Volume, debug bool) error {
+func removeVolumes(ctx context.Context, apiClient *client.Client, volumes []volume.Volume, debug bool) error {
 	for _, v := range volumes {
-		if !volumeInUse(ctx, client, v, debug) {
+		if !volumeInUse(ctx, apiClient, v, debug) {
 			if debug {
 				log.Debugf("%s - Removing Volume %s", time.Now().Format(time.RFC3339), v.Name)
 			}
-			if err := client.VolumeRemove(ctx, v.Name, true); err != nil {
+			if _, err := apiClient.VolumeRemove(ctx, v.Name, client.VolumeRemoveOptions{Force: true}); err != nil {
 				log.Errorf("%s - Failed to remove Volume %s Reason %s", currentTime(), v.Name, err)
 			} else {
 				if debug {
@@ -83,13 +91,14 @@ func run() {
 	flag.Parse()
 
 	ctx := context.Background()
-	cli, err := client.NewEnvClient()
+	cli, err := client.New(client.FromEnv)
 	if err != nil {
 		panic(err)
 	}
 
 	if debug {
 		log.SetLevel(log.DebugLevel)
+		log.Debugf("%s - Debug logging enabled: %v", currentTime())
 	}
 
 	for {
@@ -100,10 +109,10 @@ func run() {
 		}
 
 		if debug {
-			log.Debugf("%s - Found %d volumes", currentTime(), len(volumes.Volumes))
+			log.Debugf("%s - Found %d volumes", currentTime(), len(volumes))
 		}
 		if pruneUnused {
-			removeVolumes(ctx, cli, volumes.Volumes, debug)
+			removeVolumes(ctx, cli, volumes, debug)
 		}
 		log.Infof("%s - Finished checking for volumes", currentTime())
 		time.Sleep(time.Duration(interval) * time.Minute)
